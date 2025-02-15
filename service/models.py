@@ -26,8 +26,8 @@ Attributes:
 name (string) - the name of the product
 description (string) - the description the product belongs to (i.e., dog, cat)
 available (boolean) - True for products that are available for adoption
-
 """
+
 import logging
 from enum import Enum
 from decimal import Decimal
@@ -46,7 +46,7 @@ def init_db(app):
 
 
 class DataValidationError(Exception):
-    """Used for an data validation errors when deserializing"""
+    """Used for data validation errors when deserializing"""
 
 
 class Category(Enum):
@@ -92,8 +92,7 @@ class Product(db.Model):
         Creates a Product to the database
         """
         logger.info("Creating %s", self.name)
-        # id must be none to generate next primary key
-        self.id = None  # pylint: disable=invalid-name
+        self.id = None  # id must be none to generate next primary key
         db.session.add(self)
         db.session.commit()
 
@@ -118,7 +117,7 @@ class Product(db.Model):
             "id": self.id,
             "name": self.name,
             "description": self.description,
-            "price": str(self.price),
+            "price": round(float(self.price), 2),
             "available": self.available,
             "category": self.category.name  # convert enum to string
         }
@@ -137,10 +136,9 @@ class Product(db.Model):
                 self.available = data["available"]
             else:
                 raise DataValidationError(
-                    "Invalid type for boolean [available]: "
-                    + str(type(data["available"]))
+                    "Invalid type for boolean [available]: " + str(type(data["available"]))
                 )
-            self.category = getattr(Category, data["category"])  # create enum from string
+            self.category = getattr(Category, data["category"])
         except AttributeError as error:
             raise DataValidationError("Invalid attribute: " + error.args[0]) from error
         except KeyError as error:
@@ -160,11 +158,8 @@ class Product(db.Model):
         """Initializes the database session
 
         :param app: the Flask app
-        :type data: Flask
-
         """
         logger.info("Initializing database")
-        # This is where we initialize SQLAlchemy from the Flask app
         db.init_app(app)
         app.app_context().push()
         db.create_all()  # make our sqlalchemy tables
@@ -177,43 +172,19 @@ class Product(db.Model):
 
     @classmethod
     def find(cls, product_id: int):
-        """Finds a Product by it's ID
-
-        :param product_id: the id of the Product to find
-        :type product_id: int
-
-        :return: an instance with the product_id, or None if not found
-        :rtype: Product
-
-        """
+        """Finds a Product by its ID"""
         logger.info("Processing lookup for id %s ...", product_id)
         return cls.query.get(product_id)
 
     @classmethod
     def find_by_name(cls, name: str) -> list:
-        """Returns all Products with the given name
-
-        :param name: the name of the Products you want to match
-        :type name: str
-
-        :return: a collection of Products with that name
-        :rtype: list
-
-        """
+        """Returns all Products with the given name"""
         logger.info("Processing name query for %s ...", name)
         return cls.query.filter(cls.name == name)
 
     @classmethod
     def find_by_price(cls, price: Decimal) -> list:
-        """Returns all Products with the given price
-
-        :param price: the price to search for
-        :type name: float
-
-        :return: a collection of Products with that price
-        :rtype: list
-
-        """
+        """Returns all Products with the given price"""
         logger.info("Processing price query for %s ...", price)
         price_value = price
         if isinstance(price, str):
@@ -222,28 +193,12 @@ class Product(db.Model):
 
     @classmethod
     def find_by_availability(cls, available: bool = True) -> list:
-        """Returns all Products by their availability
-
-        :param available: True for products that are available
-        :type available: str
-
-        :return: a collection of Products that are available
-        :rtype: list
-
-        """
+        """Returns all Products by their availability"""
         logger.info("Processing available query for %s ...", available)
         return cls.query.filter(cls.available == available)
 
     @classmethod
     def find_by_category(cls, category: Category = Category.UNKNOWN) -> list:
-        """Returns all Products by their Category
-
-        :param category: values are ['MALE', 'FEMALE', 'UNKNOWN']
-        :type available: enum
-
-        :return: a collection of Products that are available
-        :rtype: list
-
-        """
+        """Returns all Products by their Category"""
         logger.info("Processing category query for %s ...", category.name)
         return cls.query.filter(cls.category == category)

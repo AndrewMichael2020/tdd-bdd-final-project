@@ -1,52 +1,33 @@
-######################################################################
-# Copyright 2016, 2023 John J. Rofrano. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# https://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-######################################################################
-
-"""
-Product Steps
-
-Steps file for products.feature
-
-For information on Waiting until elements are present in the HTML see:
-    https://selenium-python.readthedocs.io/waits.html
-"""
+import logging
 import requests
 from behave import given
 
-# HTTP Return Codes
-HTTP_200_OK = 200
-HTTP_201_CREATED = 201
-HTTP_204_NO_CONTENT = 204
+REST_ENDPOINT = "http://localhost:8080/products"
 
 @given('the following products')
 def step_impl(context):
-    """ Delete all Products and load new ones """
-    #
-    # List all of the products and delete them one by one
-    #
-    rest_endpoint = f"{context.base_url}/products"
-    context.resp = requests.get(rest_endpoint)
-    assert(context.resp.status_code == HTTP_200_OK)
-    for product in context.resp.json():
-        context.resp = requests.delete(f"{rest_endpoint}/{product['id']}")
-        assert(context.resp.status_code == HTTP_204_NO_CONTENT)
-
-    #
-    # load the database with new products
-    #
+    """Load products from the table into the service.
+    First, clear existing products, then create new ones."""
+    headers = {"Content-Type": "application/json"}
+    # Retrieve current products
+    response = requests.get(REST_ENDPOINT, headers=headers)
+    assert response.status_code == 200, f"GET products failed: {response.text}"
+    data = response.json()
+    # Expect response to include a "results" key
+    products = data.get("results", [])
+    for product in products:
+        delete_url = f"{REST_ENDPOINT}/{product['id']}"
+        del_response = requests.delete(delete_url, headers=headers)
+        # Our DELETE now returns a JSON message with HTTP 200
+        assert del_response.status_code == 200, f"DELETE failed: {del_response.text}"
+    # Now add each product from the table
     for row in context.table:
-        #
-        # ADD YOUR CODE HERE TO CREATE PRODUCTS VIA THE REST API
-        #
+        product_data = {
+            "name": row["name"],
+            "description": row["description"],
+            "price": row["price"],
+            "available": True if row["available"].lower() == "true" else False,
+            "category": row["category"]
+        }
+        post_response = requests.post(REST_ENDPOINT, json=product_data, headers=headers)
+        assert post_response.status_code == 201, f"POST failed: {post_response.text}"

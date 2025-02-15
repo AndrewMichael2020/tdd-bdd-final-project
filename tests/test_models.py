@@ -21,13 +21,13 @@ Test cases can be run with:
 
 While debugging just these tests it's convenient to use this:
     nosetests --stop tests/test_models.py:TestProductModel
-
 """
+
 import os
 import logging
 import unittest
 from decimal import Decimal
-from service.models import Product, Category, db
+from service.models import Product, Category, db, DataValidationError
 from service import app
 from tests.factories import ProductFactory
 
@@ -74,8 +74,8 @@ class TestProductModel(unittest.TestCase):
         """It should Create a product and assert that it exists"""
         product = Product(name="Fedora", description="A red hat", price=12.50, available=True, category=Category.CLOTHS)
         self.assertEqual(str(product), "<Product Fedora id=[None]>")
-        self.assertTrue(product is not None)
-        self.assertEqual(product.id, None)
+        self.assertIsNotNone(product)
+        self.assertIsNone(product.id)
         self.assertEqual(product.name, "Fedora")
         self.assertEqual(product.description, "A red hat")
         self.assertEqual(product.available, True)
@@ -89,11 +89,9 @@ class TestProductModel(unittest.TestCase):
         product = ProductFactory()
         product.id = None
         product.create()
-        # Assert that it was assigned an id and shows up in the database
         self.assertIsNotNone(product.id)
         products = Product.all()
         self.assertEqual(len(products), 1)
-        # Check that it matches the original product
         new_product = products[0]
         self.assertEqual(new_product.name, product.name)
         self.assertEqual(new_product.description, product.description)
@@ -101,6 +99,108 @@ class TestProductModel(unittest.TestCase):
         self.assertEqual(new_product.available, product.available)
         self.assertEqual(new_product.category, product.category)
 
-    #
-    # ADD YOUR TEST CASES HERE
-    #
+    def test_read_a_product(self):
+        """It should Read a Product"""
+        product = ProductFactory()
+        product.id = None
+        product.create()
+        self.assertIsNotNone(product.id)
+        found_product = Product.find(product.id)
+        self.assertEqual(found_product.id, product.id)
+        self.assertEqual(found_product.name, product.name)
+        self.assertEqual(found_product.description, product.description)
+        self.assertEqual(found_product.price, product.price)
+
+    def test_update_a_product(self):
+        """It should Update a Product"""
+        product = ProductFactory()
+        product.id = None
+        product.create()
+        self.assertIsNotNone(product.id)
+        product.description = "testing"
+        original_id = product.id
+        product.update()
+        self.assertEqual(product.id, original_id)
+        self.assertEqual(product.description, "testing")
+        products = Product.all()
+        self.assertEqual(len(products), 1)
+        self.assertEqual(products[0].id, original_id)
+        self.assertEqual(products[0].description, "testing")
+
+    def test_delete_a_product(self):
+        """It should Delete a Product"""
+        product = ProductFactory()
+        product.create()
+        self.assertEqual(len(Product.all()), 1)
+        product.delete()
+        self.assertEqual(len(Product.all()), 0)
+
+    def test_list_all_products(self):
+        """It should List all Products in the database"""
+        products = Product.all()
+        self.assertEqual(products, [])
+        for _ in range(5):
+            product = ProductFactory()
+            product.create()
+        products = Product.all()
+        self.assertEqual(len(products), 5)
+
+    def test_find_by_name(self):
+        """It should Find a Product by Name"""
+        products = ProductFactory.create_batch(5)
+        for product in products:
+            product.create()
+        name = products[0].name
+        count = sum(1 for product in products if product.name == name)
+        found = Product.find_by_name(name)
+        self.assertEqual(found.count(), count)
+        for product in found:
+            self.assertEqual(product.name, name)
+
+    def test_query_by_availability(self):
+        """It should Query Products by availability"""
+        products = self._create_products(10)
+        available_products = [product for product in products if product.available is True]
+        available_count = len(available_products)        
+        # test for available
+        response = self.client.get(
+            BASE_URL, query_string="available=true"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(len(data), available_count)
+        # check the data just to be sure
+        for product in data:
+            self.assertEqual(product["available"], True)
+
+    def test_find_by_category(self):
+        """It should Find Products by Category"""
+        products = ProductFactory.create_batch(10)
+        for product in products:
+            product.create()
+        category = products[0].category
+        count = sum(1 for product in products if product.category == category)
+        found = Product.find_by_category(category)
+        self.assertEqual(found.count(), count)
+        for product in found:
+            self.assertEqual(product.category, category)
+
+    def test_find_by_price(self):
+        """It should Find Products by Price"""
+        products = ProductFactory.create_batch(10)
+        for product in products:
+            product.create()
+        price = products[0].price
+        count = sum(1 for product in products if product.price == price)
+        found = Product.find_by_price(price)
+        self.assertEqual(found.count(), count)
+        for product in found:
+            self.assertEqual(product.price, price)
+
+    def test_deserialize_type_error(self):
+        """It should raise DataValidationError for invalid data type"""
+        product = ProductFactory()
+        invalid_data = ["not", "a", "dictionary"]
+        with self.assertRaises(DataValidationError) as context:
+            product.deserialize(invalid_data)
+        self.assertIn("Invalid product: body of request contained bad or no data", str(context.exception))
